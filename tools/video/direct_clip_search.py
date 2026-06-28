@@ -217,6 +217,7 @@ class DirectClipSearch(BaseTool):
                 "total": 0,
                 "available_source_names": [],
                 "unavailable_source_names": [],
+                "runtime_warnings": [],
             }
         return info
 

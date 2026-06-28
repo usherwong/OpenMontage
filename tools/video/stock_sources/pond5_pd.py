@@ -9,9 +9,11 @@ launches, historical speeches, Olympic footage.
 All public domain items are CC0-equivalent — free for any use, no
 attribution required (though appreciated).
 
-The adapter accesses Pond5's free public domain search which does not
-require an API key. For the full commercial API, a partnership agreement
-is needed, but the public domain subset is openly browsable.
+Access requires ``POND5_API_KEY``: the keyless public-domain search
+endpoint (``www.pond5.com``) no longer works — it rejects requests with
+HTTP 403 (and has failed the TLS handshake with an SSL EOF in other
+testing) — so this adapter reports itself UNAVAILABLE unless a key is
+configured. For the full commercial API, a partnership agreement is needed.
 
 What Pond5 Public Domain is good for
 -------------------------------------
@@ -24,6 +26,7 @@ What Pond5 Public Domain is good for
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -47,13 +50,24 @@ class Pond5PublicDomainSource:
     provider = "pond5"
     priority = 38
     install_instructions = (
-        "Pond5 Public Domain works without an API key for basic search. "
-        "Set POND5_API_KEY in .env for higher rate limits and full API access."
+        "Set POND5_API_KEY in .env to enable Pond5 Public Domain search. "
+        "The keyless public endpoint (www.pond5.com) no longer works "
+        "(HTTP 403 / SSL connection failure), so an API key is now required."
+    )
+    # Even with a key the public endpoint has been unreliable (HTTP 403 in
+    # recent testing, SSL EOF in earlier testing); surface that so preflight
+    # doesn't present it as fully healthy.
+    runtime_warning = (
+        "pond5_pd: the public www.pond5.com endpoint has returned HTTP 403 "
+        "(and an SSL EOF in earlier testing); searches may fail even with "
+        "POND5_API_KEY set."
     )
     supports = {"video": True, "image": True}
 
     def is_available(self) -> bool:
-        return True
+        # The keyless public-domain search endpoint is non-functional (SSL
+        # EOF), so the source is only reported available with a configured key.
+        return bool(os.environ.get("POND5_API_KEY"))
 
     def search(self, query: str, filters: SearchFilters) -> list[Candidate]:
         import requests
@@ -73,7 +87,6 @@ class Pond5PublicDomainSource:
         elif kind == "image":
             params["mt"] = "photos"
 
-        import os
         headers: dict[str, str] = {
             "User-Agent": "OpenMontage/1.0 (stock source adapter)",
         }
