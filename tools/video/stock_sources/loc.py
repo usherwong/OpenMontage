@@ -5,7 +5,11 @@ The Library of Congress holds 25+ digital collections of film and video
 materials including early cinema, newsreels, documentaries, and cultural
 recordings. Many items are public domain (pre-1928 or U.S. government).
 
-No API key required. Rate limiting is polite-crawl based.
+No API key required. Rate limiting is polite-crawl based, and loc.gov
+rejects requests with a default/empty ``User-Agent`` (HTTP 403), so the
+adapter always sends an identifying agent string. The API is still
+aggressively rate-limited and may return 403/429 under load — see
+``runtime_warning``.
 
 Fetch pattern
 -------------
@@ -47,12 +51,26 @@ class LibraryOfCongressSource:
     provider = "loc"
     priority = 40
     install_instructions = (
-        "Library of Congress works without an API key. "
-        "No setup needed."
+        "Library of Congress works without an API key. No setup needed, but "
+        "loc.gov is aggressively rate-limited and may reject requests — see "
+        "runtime_warning."
+    )
+    # loc.gov has no key to gate on. The identifying User-Agent below clears
+    # the HTTP 403 (endpoint returns 200), but the film/video format facet
+    # returned 0 results in testing and the API is slow/rate-limited. Surface
+    # that as a runtime warning rather than silently reporting healthy.
+    runtime_warning = (
+        "loc: www.loc.gov requires an identifying User-Agent (sent "
+        "automatically; without it the API returns HTTP 403). Even so, the "
+        "film/video format facet returned no results in testing and the API "
+        "is slow/rate-limited — video searches may come back empty."
     )
     supports = {"video": True, "image": True}
 
     def is_available(self) -> bool:
+        # No API key exists for loc.gov; it is a public resource. It can be
+        # rate-limited (403/429) at runtime — see `runtime_warning`, which the
+        # source catalog surfaces to preflight.
         return True
 
     def search(self, query: str, filters: SearchFilters) -> list[Candidate]:
@@ -78,7 +96,12 @@ class LibraryOfCongressSource:
                 _SEARCH_URL,
                 params=params,
                 timeout=30,
-                headers={"Accept": "application/json"},
+                headers={
+                    "Accept": "application/json",
+                    # loc.gov returns HTTP 403 for requests without an
+                    # identifying User-Agent; send one to be a polite client.
+                    "User-Agent": "OpenMontage/1.0 (stock source adapter)",
+                },
             )
             r.raise_for_status()
             data = r.json()

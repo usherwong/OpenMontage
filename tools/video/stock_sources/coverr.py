@@ -4,9 +4,11 @@ Wraps the Coverr API (``api.coverr.co``) behind the unified `StockSource`
 protocol. Coverr offers curated, high-quality stock footage (HD and 4K)
 under a free commercial-use licence with no attribution required.
 
-Free API tier: 50 requests per hour. Production tier (with Pro/Ultimate
-subscription): 2,000 requests per hour. The adapter uses the free tier
-by default — no API key required for basic search.
+An API key is required: the public Coverr API now rejects unauthenticated
+requests (HTTP 401/403 observed in testing), so this adapter reports itself
+UNAVAILABLE unless ``COVERR_API_KEY`` is set. With a key, the free tier
+allows 50 requests per hour; the Pro/Ultimate subscription tier raises
+that to 2,000 requests per hour.
 
 What Coverr is good for
 -----------------------
@@ -26,6 +28,13 @@ from .base import Candidate, SearchFilters
 
 _SEARCH_URL = "https://api.coverr.co/videos"
 _LICENSE = "Coverr License (free for commercial and personal use, no attribution required)"
+# api.coverr.co sits behind Cloudflare, which 403s (error 1010) requests
+# whose User-Agent looks like a default library client (python-requests/
+# python-urllib). Send a browser-like UA so a valid key isn't rejected.
+_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+)
 
 
 class CoverrSource:
@@ -36,14 +45,17 @@ class CoverrSource:
     provider = "coverr"
     priority = 16
     install_instructions = (
-        "Coverr works without an API key (free tier, 50 req/hr). "
-        "Set COVERR_API_KEY in .env for higher rate limits (Pro tier)."
+        "Set COVERR_API_KEY in .env to enable Coverr stock search. "
+        "The public Coverr API now requires a key (rejects keyless requests "
+        "with HTTP 401/403); free tier allows 50 req/hr, Pro tier 2,000 req/hr. "
+        "Get a key from your Coverr account at https://coverr.co/."
     )
     supports = {"video": True, "image": False}
 
     def is_available(self) -> bool:
-        # Coverr works without an API key (free tier)
-        return True
+        # The Coverr public API now rejects keyless requests (HTTP 401/403),
+        # so the source is only usable when COVERR_API_KEY is configured.
+        return bool(os.environ.get("COVERR_API_KEY"))
 
     def search(self, query: str, filters: SearchFilters) -> list[Candidate]:
         import requests
@@ -52,7 +64,7 @@ class CoverrSource:
         if kind == "image":
             return []
 
-        headers: dict[str, str] = {}
+        headers: dict[str, str] = {"User-Agent": _USER_AGENT}
         api_key = os.environ.get("COVERR_API_KEY")
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"

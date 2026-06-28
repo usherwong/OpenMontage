@@ -32,6 +32,18 @@ Adding a new source
 3. Give the class a stable `name` attribute and optional discoverability
    metadata such as `display_name`, `install_instructions`, `supports`,
    and `priority`. The package auto-discovers concrete adapters.
+4. If a source is reported available but is known to be flaky at runtime
+   (rate limits, intermittent 403s, SSL failures), set an optional
+   `runtime_warning` class attribute (a short string). `source_catalog()`
+   and `source_summary()` surface it at preflight so the agent can warn the
+   user instead of presenting the source as fully healthy. Prefer gating
+   `is_available()` on an env var (like Pexels) when a source has become
+   hard-gated behind credentials; reserve `runtime_warning` for sources that
+   have no key to gate on but are unreliable.
+
+For the live, network-verified status of each source (which are reachable
+keyless, which now require a key, which return empty), see
+`SOURCE_STATUS.md` in this package — update it when you re-probe.
 """
 from __future__ import annotations
 

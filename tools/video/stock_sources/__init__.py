@@ -98,7 +98,7 @@ def source_catalog() -> list[dict[str, object]]:
     for source in all_sources():
         cls = source.__class__
         available = bool(source.is_available())
-        catalog.append({
+        entry: dict[str, object] = {
             "name": source.name,
             "display_name": getattr(cls, "display_name", source.name),
             "provider": getattr(cls, "provider", source.name),
@@ -109,7 +109,14 @@ def source_catalog() -> list[dict[str, object]]:
                 "See the source adapter docs for setup details.",
             ),
             "supports": getattr(cls, "supports", {}),
-        })
+        }
+        # Optional honesty signal: a source may be reported available but be
+        # known-flaky at runtime (rate limits, 403s, SSL failures). Surface it
+        # so preflight can warn instead of presenting it as fully healthy.
+        runtime_warning = getattr(cls, "runtime_warning", None)
+        if runtime_warning:
+            entry["runtime_warning"] = runtime_warning
+        catalog.append(entry)
     return catalog
 
 
@@ -118,11 +125,17 @@ def source_summary() -> dict[str, object]:
     catalog = source_catalog()
     available = [entry["name"] for entry in catalog if entry["status"] == "available"]
     unavailable = [entry["name"] for entry in catalog if entry["status"] != "available"]
+    runtime_warnings = [
+        str(entry["runtime_warning"])
+        for entry in catalog
+        if entry.get("runtime_warning")
+    ]
     return {
         "configured": len(available),
         "total": len(catalog),
         "available_source_names": available,
         "unavailable_source_names": unavailable,
+        "runtime_warnings": runtime_warnings,
     }
 
 
